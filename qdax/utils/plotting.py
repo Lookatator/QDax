@@ -1,4 +1,4 @@
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import jax.numpy as jnp
 import matplotlib as mpl
@@ -12,7 +12,10 @@ from matplotlib.figure import Figure
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy.spatial import Voronoi
 
-from qdax.core.containers.mapelites_repertoire import MapElitesRepertoire
+from qdax.core.containers.mapelites_repertoire import (
+    GridRepertoire,
+    MapElitesRepertoire,
+)
 from qdax.core.containers.mome_repertoire import MOMERepertoire
 
 
@@ -593,7 +596,7 @@ def _get_projection_in_2d(
 
 
 def plot_multidimensional_map_elites_grid(
-    repertoire: MapElitesRepertoire,
+    repertoire: Union[MapElitesRepertoire, GridRepertoire],
     minval: jnp.ndarray,
     maxval: jnp.ndarray,
     grid_shape: Tuple[int, ...],
@@ -661,16 +664,16 @@ def plot_multidimensional_map_elites_grid(
     size_grid_y = np.prod(np.array(grid_shape[1::2]), dtype=int)
 
     # initialise the grid
-    grid_2d = jnp.full(
-        (size_grid_x, size_grid_y),
+    grid_2d = np.full(
+        (size_grid_x.item(), size_grid_y.item()),
         fill_value=jnp.nan,
     )
 
     # put solutions in the grid according to their projected 2-dimensional coordinates
-    for _, (desc, fit) in enumerate(zip(descriptors_integers, non_empty_fitnesses)):
+    for desc, fit in zip(descriptors_integers, non_empty_fitnesses):
         projection_2d = _get_projection_in_2d(desc, grid_shape)
         if jnp.isnan(grid_2d[projection_2d]) or fit.item() > grid_2d[projection_2d]:
-            grid_2d = grid_2d.at[projection_2d].set(fit.item())
+            grid_2d[projection_2d] = fit.item()
 
     # set plot parameters
     font_size = 12
@@ -777,23 +780,42 @@ def plot_multidimensional_map_elites_grid(
     )
 
     ax.grid(which="minor", alpha=1.0, color="#000000", linewidth=0.5)
-    ax.grid(which="major", alpha=1.0, color="#000000", linewidth=2.5)
+    if len(grid_shape) > 2:
+        ax.grid(which="major", alpha=1.0, color="#000000", linewidth=2.5)
 
+    def _get_positions_labels(
+        _minval: float, _maxval: float, _number_ticks: int, _step_labels_ticks: int
+    ) -> List[str]:
+        positions = jnp.around(
+            jnp.linspace(_minval, _maxval, num=_number_ticks), decimals=2
+        )
+        list_str_positions = []
+        for index_tick, position in enumerate(positions):
+            if index_tick % _step_labels_ticks != 0:
+                character = ""
+            else:
+                character = f"{position:.2}"
+            list_str_positions.append(character)
+        # forcing the last tick label
+        list_str_positions[-1] = f"{positions[-1]}"
+        return list_str_positions
+
+    number_label_ticks = 4
     ax.set_xticklabels(
-        [
-            f"{x:.2}"
-            for x in jnp.around(
-                jnp.linspace(minval[0], maxval[0], num=len(major_ticks_x)), decimals=2
-            )
-        ]
+        _get_positions_labels(
+            _minval=minval[0],
+            _maxval=maxval[0],
+            _number_ticks=len(major_ticks_x),
+            _step_labels_ticks=len(major_ticks_x) // number_label_ticks,
+        )
     )
     ax.set_yticklabels(
-        [
-            f"{y:.2}"
-            for y in jnp.around(
-                jnp.linspace(minval[1], maxval[1], num=len(major_ticks_y)), decimals=2
-            )
-        ]
+        _get_positions_labels(
+            _minval=minval[1],
+            _maxval=maxval[1],
+            _number_ticks=len(major_ticks_y),
+            _step_labels_ticks=len(major_ticks_y) // number_label_ticks,
+        )
     )
 
     return fig, ax
