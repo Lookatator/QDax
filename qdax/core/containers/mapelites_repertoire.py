@@ -8,8 +8,10 @@ from functools import partial
 from typing import Callable, List, Tuple, Union
 
 import flax
+import flax.struct
 import jax
 import jax.numpy as jnp
+import numpy as np
 from jax.flatten_util import ravel_pytree
 from numpy.random import RandomState
 from sklearn.cluster import KMeans
@@ -348,6 +350,298 @@ class MapElitesRepertoire(flax.struct.PyTreeNode):
             fitnesses=default_fitnesses,
             descriptors=default_descriptors,
             centroids=centroids,
+        )
+
+        # Add initial values to the repertoire
+        new_repertoire = repertoire.add(genotypes, descriptors, fitnesses)
+
+        return new_repertoire  # type: ignore
+
+
+class GridRepertoire(flax.struct.PyTreeNode):
+    """Class for the repertoire in Map Elites.
+
+    Args:
+        genotypes: a PyTree containing all the genotypes in the repertoire ordered
+            by the centroids. Each leaf has a shape (num_centroids, num_features). The
+            PyTree can be a simple Jax array or a more complex nested structure such
+            as to represent parameters of neural network in Flax.
+        fitnesses: an array that contains the fitness of solutions in each cell of the
+            repertoire, ordered by centroids. The array shape is (num_centroids,).
+        descriptors: an array that contains the descriptors of solutions in each cell
+            of the repertoire, ordered by centroids. The array shape
+            is (num_centroids, num_descriptors).
+        centroids: an array the contains the centroids of the tesselation. The array
+            shape is (num_centroids, num_descriptors).
+    """
+
+    genotypes: Genotype
+    fitnesses: Fitness
+    descriptors: Descriptor
+    min_desc_array: jnp.ndarray
+    max_desc_array: jnp.ndarray
+    resolution_desc_tuple: Tuple[int, ...] = flax.struct.field(pytree_node=False)
+
+    @classmethod
+    def get_num_cells(cls, resolution_desc_tuple) -> int:
+        return int(np.prod(resolution_desc_tuple).item())
+
+    def get_resolution_desc_array(self):
+        return jnp.asarray(self.resolution_desc_tuple)
+
+    def get_array_1d_projection_coefficients(self) -> jnp.ndarray:
+        coefficients_list = [1]
+        for x in self.resolution_desc_tuple[:-1]:
+            coefficients_list.append(coefficients_list[-1] * x)
+
+        return jnp.asarray(coefficients_list)
+
+    def get_cells_indices_in_grid(
+      self,
+      batch_of_descriptors: jnp.ndarray,
+    ) -> jnp.ndarray:
+        """
+        Returns the array of cells indices for a batch of descriptors
+        given the centroids of the repertoire.
+
+        Args:
+            batch_of_descriptors: a batch of descriptors
+                of shape (batch_size, num_descriptors)
+
+        Returns:
+            the indices of the centroids corresponding to each vector of descriptors
+                in the batch with shape (batch_size,)
+        """
+        array_1d_projection_coefficients = self.get_array_1d_projection_coefficients()
+        resolution_desc_array = self.get_resolution_desc_array()
+
+        def _get_cells_indices(
+          descriptors: jnp.ndarray,
+        ) -> jnp.ndarray:
+            """Set_of_descriptors of shape (1, num_descriptors)
+            centroids of shape (num_centroids, num_descriptors)
+            """
+            temp = (descriptors - self.min_desc_array) / (self.max_desc_array - self.min_desc_array)
+            return jnp.asarray(
+                jnp.sum(
+                    jnp.floor(temp * resolution_desc_array)
+                    * array_1d_projection_coefficients),
+                dtype=jnp.int32,
+            )
+
+        func = jax.vmap(lambda x: _get_cells_indices(x))
+        return func(batch_of_descriptors)
+
+    def save(self, path: str = "./") -> None:
+        """Saves the repertoire on disk in the form of .npy files.
+
+        Flattens the genotypes to store it with .npy format. Supposes that
+        a user will have access to the reconstruction function when loading
+        the genotypes.
+
+        Args:
+            path: Path where the data will be saved. Defaults to "./".
+        """
+
+        def flatten_genotype(genotype: Genotype) -> jnp.ndarray:
+            _flatten_genotype, _ = ravel_pytree(genotype)
+            return _flatten_genotype
+
+        # flatten all the genotypes
+        flat_genotypes = jax.vmap(flatten_genotype)(self.genotypes)
+
+        # save data
+        jnp.save(path + "genotypes.npy", flat_genotypes)
+        jnp.save(path + "fitnesses.npy", self.fitnesses)
+        jnp.save(path + "descriptors.npy", self.descriptors)
+        jnp.save(path + "min_desc_array.npy", self.min_desc_array)
+        jnp.save(path + "max_desc_array.npy", self.max_desc_array)
+        jnp.save(path + "resolution_desc_array.npy", self.resolution_desc_tuple)
+
+    @classmethod
+    def load(cls, reconstruction_fn: Callable, path: str = "./") -> GridRepertoire:
+        """Loads a MAP Elites Repertoire.
+
+        Args:
+            reconstruction_fn: Function to reconstruct a PyTree
+                from a flat array.
+            path: Path where the data is saved. Defaults to "./".
+
+        Returns:
+            A MAP Elites Repertoire.
+        """
+
+        flat_genotypes = jnp.load(path + "genotypes.npy")
+        genotypes = jax.vmap(reconstruction_fn)(flat_genotypes)
+
+        fitnesses = jnp.load(path + "fitnesses.npy")
+        descriptors = jnp.load(path + "descriptors.npy")
+        min_desc_array = jnp.load(path + "min_desc_array.npy")
+        max_desc_array = jnp.load(path + "max_desc_array.npy")
+        resolution_desc_array = jnp.load(path + "resolution_desc_array.npy")
+
+        return cls(
+            genotypes=genotypes,
+            fitnesses=fitnesses,
+            descriptors=descriptors,
+            min_desc_array=min_desc_array,
+            max_desc_array=max_desc_array,
+            resolution_desc_array=resolution_desc_array,
+        )
+
+    @partial(jax.jit, static_argnames=("num_samples",))
+    def sample(self, random_key: RNGKey, num_samples: int) -> Tuple[Genotype, RNGKey]:
+        """Sample elements in the repertoire.
+
+        Args:
+            random_key: a jax PRNG random key
+            num_samples: the number of elements to be sampled
+
+        Returns:
+            samples: a batch of genotypes sampled in the repertoire
+            random_key: an updated jax PRNG random key
+        """
+
+        repertoire_empty = self.fitnesses == -jnp.inf
+        p = (1.0 - repertoire_empty) / jnp.sum(1.0 - repertoire_empty)
+
+        random_key, subkey = jax.random.split(random_key)
+        samples = jax.tree_map(
+            lambda x: jax.random.choice(subkey, x, shape=(num_samples,), p=p),
+            self.genotypes,
+        )
+
+        return samples, random_key
+
+    @jax.jit
+    def add(
+        self,
+        batch_of_genotypes: Genotype,
+        batch_of_descriptors: Descriptor,
+        batch_of_fitnesses: Fitness,
+    ) -> GridRepertoire:
+        """
+        Add a batch of elements to the repertoire.
+
+        Args:
+            batch_of_genotypes: a batch of genotypes to be added to the repertoire.
+                Similarly to the self.genotypes argument, this is a PyTree in which
+                the leaves have a shape (batch_size, num_features)
+            batch_of_descriptors: an array that contains the descriptors of the
+                aforementioned genotypes. Its shape is (batch_size, num_descriptors)
+            batch_of_fitnesses: an array that contains the fitnesses of the
+                aforementioned genotypes. Its shape is (batch_size,)
+
+        Returns:
+            The updated MAP-Elites repertoire.
+        """
+
+        batch_of_indices = self.get_cells_indices_in_grid(batch_of_descriptors)
+        batch_of_indices = jnp.expand_dims(batch_of_indices, axis=-1)
+        batch_of_fitnesses = jnp.expand_dims(batch_of_fitnesses, axis=-1)
+
+        print(batch_of_indices.shape)
+
+        num_centroids = self.get_num_cells(self.resolution_desc_tuple)
+
+        # get fitness segment max
+        best_fitnesses = jax.ops.segment_max(
+            batch_of_fitnesses,
+            batch_of_indices.astype(jnp.int32).squeeze(axis=-1),
+            num_segments=num_centroids,
+        )
+
+        cond_values = jnp.take_along_axis(best_fitnesses, batch_of_indices, 0)
+
+        # put dominated fitness to -jnp.inf
+        batch_of_fitnesses = jnp.where(
+            batch_of_fitnesses == cond_values, x=batch_of_fitnesses, y=-jnp.inf
+        )
+
+        # get addition condition
+        repertoire_fitnesses = jnp.expand_dims(self.fitnesses, axis=-1)
+        current_fitnesses = jnp.take_along_axis(
+            repertoire_fitnesses, batch_of_indices, 0
+        )
+        addition_condition = batch_of_fitnesses > current_fitnesses
+
+        # assign fake position when relevant : num_centroids is out of bound
+        batch_of_indices = jnp.where(
+            addition_condition, x=batch_of_indices, y=num_centroids
+        )
+
+        # create new repertoire
+        new_repertoire_genotypes = jax.tree_map(
+            lambda repertoire_genotypes, new_genotypes: repertoire_genotypes.at[
+                batch_of_indices.squeeze(axis=-1)
+            ].set(new_genotypes),
+            self.genotypes,
+            batch_of_genotypes,
+        )
+
+        # compute new fitness and descriptors
+        new_fitnesses = self.fitnesses.at[batch_of_indices.squeeze(axis=-1)].set(
+            batch_of_fitnesses.squeeze(axis=-1)
+        )
+        new_descriptors = self.descriptors.at[batch_of_indices.squeeze(axis=-1)].set(
+            batch_of_descriptors
+        )
+
+        return GridRepertoire(
+            genotypes=new_repertoire_genotypes,
+            fitnesses=new_fitnesses,
+            descriptors=new_descriptors,
+            min_desc_array=self.min_desc_array,
+            max_desc_array=self.max_desc_array,
+            resolution_desc_tuple=self.resolution_desc_tuple,
+        )
+
+    @classmethod
+    def init(
+        cls,
+        genotypes: Genotype,
+        fitnesses: Fitness,
+        descriptors: Descriptor,
+        min_desc_array: jnp.ndarray,
+        max_desc_array: jnp.ndarray,
+        resolution_desc_tuple: Tuple[int, ...],
+    ) -> GridRepertoire:
+        """
+        Initialize a Map-Elites repertoire with an initial population of genotypes.
+        Requires the definition of centroids that can be computed with any method
+        such as CVT or Euclidean mapping.
+
+        Note: this function has been kept outside of the object MapElites, so it can
+        be called easily called from other modules.
+
+        Args:
+            genotypes: initial genotypes, pytree in which leaves
+                have shape (batch_size, num_features)
+            fitnesses: fitness of the initial genotypes of shape (batch_size,)
+            descriptors: descriptors of the initial genotypes
+                of shape (batch_size, num_descriptors)
+            centroids: tesselation centroids of shape (batch_size, num_descriptors)
+
+        Returns:
+            an initialized MAP-Elite repertoire
+        """
+
+        # Initialize repertoire with default values
+        num_cells = cls.get_num_cells(resolution_desc_tuple)
+        default_fitnesses = -jnp.inf * jnp.ones(shape=num_cells)
+        default_genotypes = jax.tree_map(
+            lambda x: jnp.zeros(shape=(num_cells,) + x.shape[1:]),
+            genotypes,
+        )
+        default_descriptors = jnp.zeros(shape=(num_cells, len(min_desc_array)))
+
+        repertoire = cls(
+            genotypes=default_genotypes,
+            fitnesses=default_fitnesses,
+            descriptors=default_descriptors,
+            min_desc_array=min_desc_array,
+            max_desc_array=max_desc_array,
+            resolution_desc_tuple=resolution_desc_tuple,
         )
 
         # Add initial values to the repertoire
