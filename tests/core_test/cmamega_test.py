@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import pytest
 
 from qdax.core.containers.mapelites_repertoire import (
-    MapElitesRepertoire,
+    CVTRepertoire,
     compute_cvt_centroids,
 )
 from qdax.core.emitters.cma_mega_emitter import CMAMEGAEmitter
@@ -83,7 +83,7 @@ def test_cma_mega() -> None:
     worst_objective = rastrigin_scoring(-jnp.ones(num_dimensions) * 5.12)
     best_objective = rastrigin_scoring(jnp.ones(num_dimensions) * 5.12 * 0.4)
 
-    def metrics_fn(repertoire: MapElitesRepertoire) -> Dict[str, jnp.ndarray]:
+    def metrics_fn(repertoire: CVTRepertoire) -> Dict[str, jnp.ndarray]:
 
         # get metrics
         grid_empty = repertoire.fitnesses == -jnp.inf
@@ -120,8 +120,13 @@ def test_cma_mega() -> None:
     map_elites = MAPElites(
         scoring_function=scoring_fn, emitter=emitter, metrics_function=metrics_fn
     )
-    repertoire, emitter_state, random_key = map_elites.init(
-        initial_population, centroids, random_key
+
+    empty_repertoire = CVTRepertoire.create_empty_repertoire(
+        centroids=centroids,
+        example_genotypes=initial_population,
+    )
+    repertoire, emitter_state, random_key = map_elites.init_repertoire(
+        initial_population, empty_repertoire, random_key
     )
 
     (repertoire, emitter_state, random_key,), metrics = jax.lax.scan(

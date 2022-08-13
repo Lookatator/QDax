@@ -9,7 +9,7 @@ import pytest
 
 from qdax import environments
 from qdax.core.containers.mapelites_repertoire import (
-    MapElitesRepertoire,
+    CVTRepertoire,
     compute_cvt_centroids,
 )
 from qdax.core.emitters.mutation_operators import isoline_variation
@@ -114,7 +114,7 @@ def test_map_elites(env_name: str, batch_size: int) -> None:
     reward_offset = environments.reward_offset[env_name]
 
     # Define a metrics function
-    def metrics_fn(repertoire: MapElitesRepertoire) -> Dict:
+    def metrics_fn(repertoire: CVTRepertoire) -> Dict:
 
         # Get metrics
         grid_empty = repertoire.fitnesses == -jnp.inf
@@ -144,8 +144,12 @@ def test_map_elites(env_name: str, batch_size: int) -> None:
     )
 
     # Compute initial repertoire
-    repertoire, emitter_state, random_key = map_elites.init(
-        init_variables, centroids, random_key
+    empty_repertoire = CVTRepertoire.create_empty_repertoire(
+        centroids=centroids,
+        example_genotypes=init_variables,
+    )
+    repertoire, emitter_state, random_key = map_elites.init_repertoire(
+        init_variables, empty_repertoire, random_key
     )
 
     # Run the algorithm

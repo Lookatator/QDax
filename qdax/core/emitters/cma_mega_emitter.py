@@ -7,10 +7,7 @@ import jax
 import jax.numpy as jnp
 
 from qdax.core.cmaes import CMAES, CMAESState
-from qdax.core.containers.mapelites_repertoire import (
-    MapElitesRepertoire,
-    get_cells_indices,
-)
+from qdax.core.containers.mapelites_repertoire import CVTRepertoire, get_cells_indices
 from qdax.core.emitters.emitter import Emitter, EmitterState
 from qdax.types import Descriptor, ExtraScores, Fitness, Genotype, Gradient, RNGKey
 
@@ -126,7 +123,7 @@ class CMAMEGAEmitter(Emitter):
     @partial(jax.jit, static_argnames=("self", "batch_size"))
     def emit(
         self,
-        repertoire: Optional[MapElitesRepertoire],
+        repertoire: Optional[CVTRepertoire],
         emitter_state: CMAMEGAState,
         random_key: RNGKey,
     ) -> Tuple[Genotype, RNGKey]:
@@ -172,7 +169,7 @@ class CMAMEGAEmitter(Emitter):
     def state_update(
         self,
         emitter_state: CMAMEGAState,
-        repertoire: MapElitesRepertoire,
+        repertoire: CVTRepertoire,
         genotypes: Genotype,
         fitnesses: Fitness,
         descriptors: Descriptor,

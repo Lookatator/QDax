@@ -2,7 +2,7 @@ import jax.numpy as jnp
 import pytest
 
 from qdax.core.containers.mapelites_repertoire import (
-    MapElitesRepertoire,
+    CVTRepertoire,
     compute_euclidean_centroids,
 )
 
@@ -35,7 +35,7 @@ def test_mapelites_repertoire() -> None:
     pytest.assume(jnp.allclose(centroids, expected_centroids, atol=1e-6))
 
     # create an instance
-    repertoire = MapElitesRepertoire(
+    repertoire = CVTRepertoire(
         genotypes=jnp.zeros(shape=(num_centroids, genotype_size)),
         fitnesses=jnp.ones(shape=(num_centroids,)) * (-jnp.inf),
         descriptors=jnp.zeros(shape=(num_centroids, num_descriptors)),

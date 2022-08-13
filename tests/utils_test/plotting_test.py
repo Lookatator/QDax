@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from qdax.core.containers.mapelites_repertoire import MapElitesRepertoire
+from qdax.core.containers.mapelites_repertoire import CVTRepertoire
 from qdax.utils.plotting import plot_multidimensional_map_elites_grid
 
 
@@ -49,7 +49,7 @@ def test_onion_grid(num_descriptors: int, grid_shape: Tuple[int, ...]) -> None:
     # Uncomment to test with "empty" descriptors
     # fitnesses = fitnesses.at[10:].set(-jnp.inf)
 
-    repertoire = MapElitesRepertoire(None, fitnesses, descriptors, None)
+    repertoire = CVTRepertoire(None, fitnesses, descriptors, None)
 
     fig, ax = plot_multidimensional_map_elites_grid(
         repertoire=repertoire,

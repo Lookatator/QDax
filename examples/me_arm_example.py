@@ -6,9 +6,10 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
+from qdax.core.containers.mapelites_repertoire import GridRepertoire
 from qdax.core.emitters.mutation_operators import isoline_variation
 from qdax.core.emitters.standard_emitters import MixingEmitter
-from qdax.core.map_elites import MAPElitesGrid
+from qdax.core.map_elites import MAPElites
 from qdax.tasks.arm import arm_scoring_function
 from qdax.utils.metrics import default_qd_metrics
 from qdax.utils.plotting import plot_multidimensional_map_elites_grid
@@ -60,7 +61,14 @@ metrics_fn = functools.partial(
 )
 
 # Instantiate MAP-Elites
-map_elites = MAPElitesGrid(
+empty_repertoire = GridRepertoire.create_empty_repertoire(
+    example_batch_genotypes=init_variables,
+    min_desc_array=jnp.array([0.0, 0.0]),
+    max_desc_array=jnp.array([1.0, 1.0]),
+    grid_shape=grid_shape,
+)
+
+map_elites = MAPElites(
     scoring_function=arm_scoring_function,
     emitter=mixing_emitter,
     metrics_function=metrics_fn,
@@ -68,12 +76,10 @@ map_elites = MAPElitesGrid(
 
 
 # Initializes repertoire and emitter state
-repertoire, emitter_state, random_key = map_elites.init(
+repertoire, emitter_state, random_key = map_elites.init_repertoire(
     init_variables,
-    min_desc_array=jnp.array([0.0, 0.0]),
-    max_desc_array=jnp.array([1.0, 1.0]),
-    resolution_desc_tuple=grid_shape,
-    random_key=random_key,
+    empty_repertoire,
+    random_key,
 )
 
 # Run MAP-Elites loop

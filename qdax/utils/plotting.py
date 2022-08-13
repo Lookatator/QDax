@@ -12,10 +12,7 @@ from matplotlib.figure import Figure
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy.spatial import Voronoi
 
-from qdax.core.containers.mapelites_repertoire import (
-    GridRepertoire,
-    MapElitesRepertoire,
-)
+from qdax.core.containers.mapelites_repertoire import CVTRepertoire, GridRepertoire
 from qdax.core.containers.mome_repertoire import MOMERepertoire
 
 
@@ -218,7 +215,7 @@ def plot_2d_map_elites_repertoire(
 def plot_map_elites_results(
     env_steps: jnp.ndarray,
     metrics: Dict,
-    repertoire: MapElitesRepertoire,
+    repertoire: CVTRepertoire,
     min_bd: jnp.ndarray,
     max_bd: jnp.ndarray,
 ) -> Tuple[Optional[Figure], Axes]:
@@ -596,7 +593,7 @@ def _get_projection_in_2d(
 
 
 def plot_multidimensional_map_elites_grid(
-    repertoire: Union[MapElitesRepertoire, GridRepertoire],
+    repertoire: Union[CVTRepertoire, GridRepertoire],
     minval: jnp.ndarray,
     maxval: jnp.ndarray,
     grid_shape: Tuple[int, ...],
