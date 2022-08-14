@@ -7,8 +7,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from qdax.core.containers.mapelites_repertoire import GridRepertoire
-from qdax.core.emitters.mutation_operators import isoline_variation
-from qdax.core.emitters.standard_emitters import MixingEmitter
+from qdax.core.emitters.emitter import MultiEmitter
+from qdax.core.emitters.mutation_operators import (
+    IsolineVariationOperator,
+    SelectionVariationEmitter,
+)
 from qdax.core.map_elites import MAPElites
 from qdax.tasks.arm import arm_scoring_function
 from qdax.utils.metrics import default_qd_metrics
@@ -40,19 +43,27 @@ init_variables = jax.random.uniform(
 )
 
 # Define emitter
-variation_fn = functools.partial(
-    isoline_variation,
-    iso_sigma=0.005,
-    line_sigma=0,
-    minval=min_param,
-    maxval=max_param,
+emitter_1 = SelectionVariationEmitter(
+    batch_size=batch_size // 2,
+    variation_operator=IsolineVariationOperator(
+        iso_sigma=0.005,
+        line_sigma=0,
+        minval=min_param,
+        maxval=max_param,
+    ),
 )
-mixing_emitter = MixingEmitter(
-    mutation_fn=lambda x, y: (x, y),
-    variation_fn=variation_fn,
-    variation_percentage=1.0,
-    batch_size=batch_size,
+
+emitter_2 = SelectionVariationEmitter(
+    batch_size=batch_size // 2,
+    variation_operator=IsolineVariationOperator(
+        iso_sigma=0.005,
+        line_sigma=0,
+        minval=min_param,
+        maxval=max_param,
+    ),
 )
+
+emitter = MultiEmitter(emitters_tuple=(emitter_1, emitter_2))
 
 # Define a metrics function
 metrics_fn = functools.partial(
@@ -70,7 +81,7 @@ empty_repertoire = GridRepertoire.create_empty_repertoire(
 
 map_elites = MAPElites(
     scoring_function=arm_scoring_function,
-    emitter=mixing_emitter,
+    emitter=emitter,
     metrics_function=metrics_fn,
 )
 
