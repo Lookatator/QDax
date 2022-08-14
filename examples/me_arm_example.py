@@ -1,15 +1,19 @@
 import functools
+import time
 
 import jax
+import jax.numpy as jnp
 import matplotlib.pyplot as plt
+import numpy as np
 
-from qdax.core.containers.mapelites_repertoire import compute_euclidean_centroids
 from qdax.core.emitters.mutation_operators import isoline_variation
 from qdax.core.emitters.standard_emitters import MixingEmitter
-from qdax.core.map_elites import MAPElites
+from qdax.core.map_elites import MAPElitesGrid
 from qdax.tasks.arm import arm_scoring_function
 from qdax.utils.metrics import default_qd_metrics
-from qdax.utils.plotting import plot_2d_map_elites_repertoire
+from qdax.utils.plotting import plot_multidimensional_map_elites_grid
+
+start = time.time()
 
 seed = 42
 num_param_dimensions = 8  # num DoF arm
@@ -56,39 +60,41 @@ metrics_fn = functools.partial(
 )
 
 # Instantiate MAP-Elites
-map_elites = MAPElites(
+map_elites = MAPElitesGrid(
     scoring_function=arm_scoring_function,
     emitter=mixing_emitter,
     metrics_function=metrics_fn,
 )
 
-# Compute the centroids
-centroids = compute_euclidean_centroids(
-    grid_shape=grid_shape,
-    minval=min_bd,
-    maxval=max_bd,
-)
 
 # Initializes repertoire and emitter state
 repertoire, emitter_state, random_key = map_elites.init(
-    init_variables, centroids, random_key
+    init_variables,
+    min_desc_array=jnp.array([0.0, 0.0]),
+    max_desc_array=jnp.array([1.0, 1.0]),
+    resolution_desc_tuple=grid_shape,
+    random_key=random_key,
 )
 
 # Run MAP-Elites loop
-for _ in range(num_iterations):
+for index_iteration in range(num_iterations):
     (repertoire, emitter_state, metrics, random_key,) = map_elites.update(
         repertoire,
         emitter_state,
         random_key,
     )
+    if index_iteration == 0:
+        start = time.time()
 
+print(f"Time elapsed after compilation of map_elites.update: {time.time() - start}")
+
+print("Plotting...")
 # plot archive
-fig, axes = plot_2d_map_elites_repertoire(
-    centroids=repertoire.centroids,
-    repertoire_fitnesses=repertoire.fitnesses,
-    minval=min_bd,
-    maxval=max_bd,
-    repertoire_descriptors=repertoire.descriptors,
+fig, axes = plot_multidimensional_map_elites_grid(
+    repertoire=repertoire,
+    grid_shape=grid_shape,
+    minval=np.array([min_bd, min_bd]),
+    maxval=np.array([max_bd, max_bd]),
     vmin=-0.2,
     vmax=0.0,
 )
