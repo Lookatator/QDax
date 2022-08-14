@@ -10,7 +10,7 @@ import jax
 from jax import numpy as jnp
 
 from qdax.core.containers.ga_repertoire import GARepertoire
-from qdax.core.containers.mapelites_repertoire import MapElitesRepertoire
+from qdax.core.containers.mapelites_repertoire import QualityDiversityRepertoire
 from qdax.core.containers.mome_repertoire import MOMERepertoire
 from qdax.types import Metrics
 from qdax.utils.pareto_front import compute_hypervolume
@@ -71,7 +71,9 @@ def default_ga_metrics(
     }
 
 
-def default_qd_metrics(repertoire: MapElitesRepertoire, qd_offset: float) -> Metrics:
+def default_qd_metrics(
+    repertoire: QualityDiversityRepertoire, qd_offset: float
+) -> Metrics:
     """Compute the usual QD metrics that one can retrieve
     from a MAP Elites repertoire.
 

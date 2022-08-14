@@ -4,7 +4,10 @@ from typing import Tuple
 import jax
 import jax.numpy as jnp
 
-from qdax.core.containers.mapelites_repertoire import MapElitesRepertoire
+from qdax.core.containers.mapelites_repertoire import (
+    CVTRepertoire,
+    QualityDiversityRepertoire,
+)
 from qdax.core.emitters.emitter import Emitter, EmitterState
 from qdax.types import Centroid, Descriptor, ExtraScores, Fitness, Genotype, RNGKey
 
@@ -18,7 +21,7 @@ class OMGMEGAEmitterState(EmitterState):
             of the indivuals.
     """
 
-    gradients_repertoire: MapElitesRepertoire
+    gradients_repertoire: QualityDiversityRepertoire
 
 
 class OMGMEGAEmitter(Emitter):
@@ -104,7 +107,7 @@ class OMGMEGAEmitter(Emitter):
         )
 
         # instantiate de gradients repertoire
-        gradients_repertoire = MapElitesRepertoire(
+        gradients_repertoire = CVTRepertoire(
             genotypes=default_gradients,
             fitnesses=default_fitnesses,
             descriptors=default_descriptors,
@@ -122,7 +125,7 @@ class OMGMEGAEmitter(Emitter):
     )
     def emit(
         self,
-        repertoire: MapElitesRepertoire,
+        repertoire: QualityDiversityRepertoire,
         emitter_state: OMGMEGAEmitterState,
         random_key: RNGKey,
     ) -> Tuple[Genotype, RNGKey]:
@@ -196,7 +199,7 @@ class OMGMEGAEmitter(Emitter):
     def state_update(
         self,
         emitter_state: OMGMEGAEmitterState,
-        repertoire: MapElitesRepertoire,
+        repertoire: QualityDiversityRepertoire,
         genotypes: Genotype,
         fitnesses: Fitness,
         descriptors: Descriptor,

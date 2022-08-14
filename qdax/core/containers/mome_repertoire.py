@@ -11,7 +11,7 @@ import jax
 import jax.numpy as jnp
 
 from qdax.core.containers.mapelites_repertoire import (
-    MapElitesRepertoire,
+    QualityDiversityRepertoire,
     get_cells_indices,
 )
 from qdax.types import (
@@ -26,7 +26,7 @@ from qdax.types import (
 from qdax.utils.pareto_front import compute_masked_pareto_front
 
 
-class MOMERepertoire(MapElitesRepertoire):
+class MOMERepertoire(QualityDiversityRepertoire):
     """Class for the repertoire in Multi Objective Map Elites
 
     This class inherits from MAPElitesRepertoire. The stored data
@@ -344,11 +344,10 @@ class MOMERepertoire(MapElitesRepertoire):
         return self
 
     @classmethod
-    def init(  # type: ignore
+    def create_empty_repertoire(  # type: ignore
         cls,
-        genotypes: Genotype,
-        fitnesses: Fitness,
-        descriptors: Descriptor,
+        example_genotypes: Genotype,
+        example_fitnesses: Fitness,
         centroids: Centroid,
         pareto_front_max_length: int,
     ) -> MOMERepertoire:
@@ -361,22 +360,20 @@ class MOMERepertoire(MapElitesRepertoire):
         be called easily called from other modules.
 
         Args:
-            genotypes: initial genotypes, pytree in which leaves
+            example_genotypes: initial genotypes, pytree in which leaves
                 have shape (batch_size, num_features)
-            fitnesses: fitness of the initial genotypes of shape:
+            example_fitnesses: fitness of the initial genotypes of shape:
                 (batch_size, num_criteria)
-            descriptors: descriptors of the initial genotypes
-                of shape (batch_size, num_descriptors)
             centroids: tesselation centroids of shape (batch_size, num_descriptors)
             pareto_front_max_length: maximum size of the pareto fronts
 
         Returns:
-            An initialized MAP-Elite repertoire
+            An initialized MAP-Elite empty_repertoire
         """
 
         # get dimensions
-        num_criteria = fitnesses.shape[1]
-        num_descriptors = descriptors.shape[1]
+        num_criteria = example_fitnesses.shape[1]
+        num_descriptors = centroids.shape[1]
         num_centroids = centroids.shape[0]
 
         # create default values
@@ -391,23 +388,41 @@ class MOMERepertoire(MapElitesRepertoire):
                 )
                 + x.shape[1:]
             ),
-            genotypes,
+            example_genotypes,
         )
         default_descriptors = jnp.zeros(
             shape=(num_centroids, pareto_front_max_length, num_descriptors)
         )
 
-        # create repertoire with default values
-        repertoire = MOMERepertoire(  # type: ignore
+        # create empty_repertoire with default values
+        empty_repertoire = MOMERepertoire(  # type: ignore
             genotypes=default_genotypes,
             fitnesses=default_fitnesses,
             descriptors=default_descriptors,
             centroids=centroids,
         )
 
-        # add first batch of individuals in the repertoire
-        new_repertoire = repertoire.add(genotypes, descriptors, fitnesses)
+        return empty_repertoire  # type: ignore
 
+    def init(
+        self,
+        genotypes: Genotype,
+        fitnesses: Fitness,
+        descriptors: Descriptor,
+        centroids: Centroid,
+        pareto_front_max_length: int,
+    ) -> MOMERepertoire:
+        empty_repertoire = self.create_empty_repertoire(
+            example_genotypes=genotypes,
+            example_fitnesses=fitnesses,
+            centroids=centroids,
+            pareto_front_max_length=pareto_front_max_length,
+        )
+        new_repertoire = empty_repertoire.add(  # type: ignore
+            batch_of_genotypes=genotypes,
+            batch_of_descriptors=descriptors,
+            batch_of_fitnesses=fitnesses,
+        )
         return new_repertoire  # type: ignore
 
     @jax.jit
