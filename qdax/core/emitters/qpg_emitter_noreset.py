@@ -14,6 +14,7 @@ from jax import numpy as jnp
 
 from qdax.core.containers.repertoire import Repertoire
 from qdax.core.emitters.emitter import Emitter, EmitterState
+from qdax.core.emitters.qpg_emitter import QualityPGConfig
 from qdax.core.neuroevolution.buffers.buffer import QDTransition, ReplayBuffer
 from qdax.core.neuroevolution.losses.td3_loss import make_td3_loss_fn
 from qdax.core.neuroevolution.networks.networks import QModule
@@ -21,13 +22,14 @@ from qdax.environments.base_wrappers import QDEnv
 from qdax.types import Descriptor, ExtraScores, Fitness, Genotype, Params, RNGKey
 
 
-class QualityPGEmitterState(EmitterState):
+class QualityPGEmitterStateNoReset(EmitterState):
     """Contains training state for the learner."""
 
     critic_params: Params
     critic_optimizer_state: optax.OptState
     actor_params: Params
     actor_opt_state: optax.OptState
+    controllers_optimizer_state: optax.OptState
     target_critic_params: Params
     target_actor_params: Params
     replay_buffer: ReplayBuffer
@@ -35,7 +37,7 @@ class QualityPGEmitterState(EmitterState):
     steps: jnp.ndarray
 
 
-class QualityPGEmitter(Emitter):
+class QualityPGEmitterNoReset(Emitter):
     """
     A policy gradient emitter used to implement the Policy Gradient Assisted MAP-Elites
     (PGA-Map-Elites) algorithm.
@@ -97,7 +99,7 @@ class QualityPGEmitter(Emitter):
 
     def init(
         self, init_genotypes: Genotype, random_key: RNGKey
-    ) -> Tuple[QualityPGEmitterState, RNGKey]:
+    ) -> Tuple[QualityPGEmitterStateNoReset, RNGKey]:
         """Initializes the emitter state.
 
         Args:
@@ -127,6 +129,9 @@ class QualityPGEmitter(Emitter):
         # Prepare init optimizer states
         critic_optimizer_state = self._critic_optimizer.init(critic_params)
         actor_optimizer_state = self._actor_optimizer.init(actor_params)
+        controllers_optimizer_state = self._policies_optimizer.init(
+            actor_params
+        )
 
         # Initialize replay buffer
         dummy_transition = QDTransition.init_dummy(
@@ -141,11 +146,12 @@ class QualityPGEmitter(Emitter):
 
         # Initial training state
         random_key, subkey = jax.random.split(random_key)
-        emitter_state = QualityPGEmitterState(
+        emitter_state = QualityPGEmitterStateNoReset(
             critic_params=critic_params,
             critic_optimizer_state=critic_optimizer_state,
             actor_params=actor_params,
             actor_opt_state=actor_optimizer_state,
+            controllers_optimizer_state=controllers_optimizer_state,
             target_critic_params=target_critic_params,
             target_actor_params=target_actor_params,
             random_key=subkey,
@@ -162,7 +168,7 @@ class QualityPGEmitter(Emitter):
     def emit(
         self,
         repertoire: Repertoire,
-        emitter_state: QualityPGEmitterState,
+        emitter_state: QualityPGEmitterStateNoReset,
         random_key: RNGKey,
     ) -> Tuple[Genotype, RNGKey]:
         """Do a step of PG emission.
@@ -207,7 +213,7 @@ class QualityPGEmitter(Emitter):
         static_argnames=("self",),
     )
     def emit_pg(
-        self, emitter_state: QualityPGEmitterState, parents: Genotype
+        self, emitter_state: QualityPGEmitterStateNoReset, parents: Genotype
     ) -> Genotype:
         """Emit the offsprings generated through pg mutation.
 
@@ -232,7 +238,7 @@ class QualityPGEmitter(Emitter):
         jax.jit,
         static_argnames=("self",),
     )
-    def emit_actor(self, emitter_state: QualityPGEmitterState) -> Genotype:
+    def emit_actor(self, emitter_state: QualityPGEmitterStateNoReset) -> Genotype:
         """Emit the greedy actor.
 
         Simply needs to be retrieved from the emitter state.
@@ -249,13 +255,13 @@ class QualityPGEmitter(Emitter):
     @partial(jax.jit, static_argnames=("self",))
     def state_update(
         self,
-        emitter_state: QualityPGEmitterState,
+        emitter_state: QualityPGEmitterStateNoReset,
         repertoire: Optional[Repertoire],
         genotypes: Optional[Genotype],
         fitnesses: Optional[Fitness],
         descriptors: Optional[Descriptor],
         extra_scores: ExtraScores,
-    ) -> QualityPGEmitterState:
+    ) -> QualityPGEmitterStateNoReset:
         """This function gives an opportunity to update the emitter state
         after the genotypes have been scored.
 
@@ -286,8 +292,8 @@ class QualityPGEmitter(Emitter):
         emitter_state = emitter_state.replace(replay_buffer=replay_buffer)
 
         def scan_train_critics(
-            carry: QualityPGEmitterState, unused: Any
-        ) -> Tuple[QualityPGEmitterState, Any]:
+            carry: QualityPGEmitterStateNoReset, unused: Any
+        ) -> Tuple[QualityPGEmitterStateNoReset, Any]:
             emitter_state = carry
             new_emitter_state = self._train_critics(emitter_state)
             return new_emitter_state, ()
@@ -304,8 +310,8 @@ class QualityPGEmitter(Emitter):
 
     @partial(jax.jit, static_argnames=("self",))
     def _train_critics(
-        self, emitter_state: QualityPGEmitterState
-    ) -> QualityPGEmitterState:
+        self, emitter_state: QualityPGEmitterStateNoReset
+    ) -> QualityPGEmitterStateNoReset:
         """Apply one gradient step to critics and to the greedy actor
         (contained in carry in training_state), then soft update target critics
         and target actor.
@@ -452,7 +458,7 @@ class QualityPGEmitter(Emitter):
     def _mutation_function_pg(
         self,
         policy_params: Genotype,
-        emitter_state: QualityPGEmitterState,
+        emitter_state: QualityPGEmitterStateNoReset,
     ) -> Genotype:
         """Apply pg mutation to a policy via multiple steps of gradient descent.
         First, update the rewards to be diversity rewards, then apply the gradient
@@ -469,31 +475,28 @@ class QualityPGEmitter(Emitter):
         """
 
         # Define new policy optimizer state
-        policy_optimizer_state = self._policies_optimizer.init(policy_params)
+        # policy_optimizer_state = self._policies_optimizer.init(policy_params)
 
         def scan_train_policy(
-            carry: Tuple[QualityPGEmitterState, Genotype, optax.OptState],
+            carry: Tuple[QualityPGEmitterStateNoReset, Genotype],
             unused: Any,
-        ) -> Tuple[Tuple[QualityPGEmitterState, Genotype, optax.OptState], Any]:
-            emitter_state, policy_params, policy_optimizer_state = carry
+        ) -> Tuple[Tuple[QualityPGEmitterStateNoReset, Genotype], Any]:
+            emitter_state, policy_params = carry
             (
                 new_emitter_state,
                 new_policy_params,
-                new_policy_optimizer_state,
             ) = self._train_policy(
                 emitter_state,
                 policy_params,
-                policy_optimizer_state,
             )
             return (
                 new_emitter_state,
                 new_policy_params,
-                new_policy_optimizer_state,
             ), ()
 
         (emitter_state, policy_params, policy_optimizer_state,), _ = jax.lax.scan(
             scan_train_policy,
-            (emitter_state, policy_params, policy_optimizer_state),
+            (emitter_state, policy_params),
             (),
             length=self._config.num_pg_training_steps,
         )
@@ -503,10 +506,9 @@ class QualityPGEmitter(Emitter):
     @partial(jax.jit, static_argnames=("self",))
     def _train_policy(
         self,
-        emitter_state: QualityPGEmitterState,
+        emitter_state: QualityPGEmitterStateNoReset,
         policy_params: Params,
-        policy_optimizer_state: optax.OptState,
-    ) -> Tuple[QualityPGEmitterState, Params, optax.OptState]:
+    ) -> Tuple[QualityPGEmitterStateNoReset, Params]:
         """Apply one gradient step to a policy (called policy_params).
 
         Args:
@@ -528,7 +530,7 @@ class QualityPGEmitter(Emitter):
         # update policy
         policy_optimizer_state, policy_params = self._update_policy(
             critic_params=emitter_state.critic_params,
-            policy_optimizer_state=policy_optimizer_state,
+            policy_optimizer_state=emitter_state.controllers_optimizer_state,
             policy_params=policy_params,
             transitions=transitions,
         )
@@ -537,9 +539,10 @@ class QualityPGEmitter(Emitter):
         new_emitter_state = emitter_state.replace(
             random_key=random_key,
             replay_buffer=replay_buffer,
+            controllers_optimizer_state=policy_optimizer_state,
         )
 
-        return new_emitter_state, policy_params, policy_optimizer_state
+        return new_emitter_state, policy_params
 
     @partial(jax.jit, static_argnames=("self",))
     def _update_policy(
