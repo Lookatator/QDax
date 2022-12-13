@@ -56,7 +56,8 @@ from qdax.core.neuroevolution.networks.networks import MLP
 from qdax.core.emitters.mutation_operators import isoline_variation
 from qdax.utils.plotting import plot_map_elites_results
 
-from qdax.core.emitters.pga_me_emitter import PGAMEConfig, PGAMEEmitter
+from qdax.core.emitters.pga_me_emitter import PGAMEConfig, PGAMEEmitter, \
+    PGAMEEmitterNoReset
 from qdax.utils.metrics import CSVLogger, default_qd_metrics
 
 
@@ -217,7 +218,7 @@ variation_fn = functools.partial(
     isoline_variation, iso_sigma=iso_sigma, line_sigma=line_sigma
 )
 
-pg_emitter = PGAMEEmitter(
+pg_emitter = PGAMEEmitterNoReset(
     config=pga_emitter_config,
     policy_network=policy_network,
     env=env,
