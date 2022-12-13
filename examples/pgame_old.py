@@ -64,7 +64,7 @@ from qdax.utils.metrics import CSVLogger, default_qd_metrics
 #@title QD Training Definitions Fields
 #@markdown ---
 env_name = 'walker2d_uni'#@param['ant_uni', 'hopper_uni', 'walker_uni', 'halfcheetah_uni', 'humanoid_uni', 'ant_omni', 'humanoid_omni']
-episode_length = 250 #@param {type:"integer"}
+episode_length = 1000 #@param {type:"integer"}
 num_iterations = 800 #@param {type:"integer"}
 seed = 42 #@param {type:"integer"}
 policy_hidden_layer_sizes = (64, 64) #@param {type:"raw"}
