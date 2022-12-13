@@ -48,7 +48,8 @@ import qdax
 
 
 from qdax.core.map_elites import MAPElites
-from qdax.core.containers.mapelites_repertoire import compute_cvt_centroids
+from qdax.core.containers.mapelites_repertoire import compute_cvt_centroids, \
+    compute_euclidean_centroids
 from qdax import environments
 from qdax.tasks.brax_envs import scoring_function_brax_envs as scoring_function
 from qdax.core.neuroevolution.buffers.buffer import QDTransition
@@ -66,13 +67,13 @@ from qdax.utils.metrics import CSVLogger, default_qd_metrics
 #@markdown ---
 env_name = 'walker2d_uni'#@param['ant_uni', 'hopper_uni', 'walker_uni', 'halfcheetah_uni', 'humanoid_uni', 'ant_omni', 'humanoid_omni']
 episode_length = 250 #@param {type:"integer"}
-num_iterations = 4000 #@param {type:"integer"}
+num_iterations = 800 #@param {type:"integer"}
 seed = 42 #@param {type:"integer"}
-policy_hidden_layer_sizes = (256, 256) #@param {type:"raw"}
-iso_sigma = 0.005 #@param {type:"number"}
-line_sigma = 0.05 #@param {type:"number"}
+policy_hidden_layer_sizes = (64, 64) #@param {type:"raw"}
+iso_sigma = 0.01 #@param {type:"number"}
+line_sigma = 0.1 #@param {type:"number"}
 num_init_cvt_samples = 50000 #@param {type:"integer"}
-num_centroids = 1024 #@param {type:"integer"}
+grid_shape = (50, 50) #@param {type:"integer"}
 min_bd = 0. #@param {type:"number"}
 max_bd = 1.0 #@param {type:"number"}
 
@@ -80,7 +81,7 @@ max_bd = 1.0 #@param {type:"number"}
 proportion_mutation_ga = 0.5
 
 # TD3 params
-env_batch_size = 100 #@param {type:"number"}
+env_batch_size = 512 #@param {type:"number"}
 replay_buffer_size = 1000000 #@param {type:"number"}
 critic_hidden_layer_size = (256, 256) #@param {type:"raw"}
 critic_learning_rate = 3e-4 #@param {type:"number"}
@@ -237,13 +238,10 @@ map_elites = MAPElites(
 )
 
 # Compute the centroids
-centroids, random_key = compute_cvt_centroids(
-    num_descriptors=env.behavior_descriptor_length,
-    num_init_cvt_samples=num_init_cvt_samples,
-    num_centroids=num_centroids,
+centroids = compute_euclidean_centroids(
+    grid_shape=grid_shape,
     minval=min_bd,
     maxval=max_bd,
-    random_key=random_key,
 )
 
 # compute initial repertoire
