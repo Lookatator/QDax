@@ -466,3 +466,7 @@ class PGAMEEmitterOld(Emitter):
         )
 
         return new_emitter_state, controller_params
+
+    @property
+    def batch_size(self):
+        return self._config.env_batch_size
