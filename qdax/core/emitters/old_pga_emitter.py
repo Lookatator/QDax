@@ -20,7 +20,7 @@ from qdax.types import Descriptor, ExtraScores, Fitness, Genotype, Params, RNGKe
 
 
 @dataclass
-class PGAMEConfig:
+class PGAMEConfigOld:
     """Configuration for PGAME Algorithm"""
 
     env_batch_size: int = 100
@@ -43,7 +43,7 @@ class PGAMEConfig:
 
     policy_delay: int = 2
 
-class PGAMEEmitterState(EmitterState):
+class PGAMEEmitterStateOld(EmitterState):
     """Contains training state for the learner."""
 
     critic_params: Params
@@ -57,7 +57,7 @@ class PGAMEEmitterState(EmitterState):
     random_key: RNGKey
     steps: jnp.ndarray
 
-class PGAMEEmitter(Emitter):
+class PGAMEEmitterOld(Emitter):
     """
     A policy gradient emitter used to implement the Policy Gradient Assisted MAP-Elites
     (PGA-Map-Elites) algorithm.
@@ -65,7 +65,7 @@ class PGAMEEmitter(Emitter):
 
     def __init__(
         self,
-        config: PGAMEConfig,
+        config: PGAMEConfigOld,
         policy_network: nn.Module,
         env: QDEnv,
         variation_fn: Callable[[Params, Params, RNGKey], Tuple[Params, RNGKey]],
@@ -104,7 +104,7 @@ class PGAMEEmitter(Emitter):
 
     def init(
         self, init_genotypes: Genotype, random_key: RNGKey
-    ) -> Tuple[PGAMEEmitterState, RNGKey]:
+    ) -> Tuple[PGAMEEmitterStateOld, RNGKey]:
         """Initializes the emitter state.
 
         Args:
@@ -112,7 +112,7 @@ class PGAMEEmitter(Emitter):
             random_key: A random key.
 
         Returns:
-            The initial state of the PGAMEEmitter, a new random key.
+            The initial state of the PGAMEEmitterOld, a new random key.
         """
 
         observation_size = self._env.observation_size
@@ -153,7 +153,7 @@ class PGAMEEmitter(Emitter):
 
         # Initial training state
         random_key, subkey = jax.random.split(random_key)
-        emitter_state = PGAMEEmitterState(
+        emitter_state = PGAMEEmitterStateOld(
             critic_params=critic_params,
             critic_optimizer_state=critic_optimizer_state,
             greedy_policy_params=greedy_policy_params,
@@ -175,7 +175,7 @@ class PGAMEEmitter(Emitter):
     def emit(
         self,
         repertoire: Repertoire,
-        emitter_state: PGAMEEmitterState,
+        emitter_state: PGAMEEmitterStateOld,
         random_key: RNGKey,
     ) -> Tuple[Genotype, RNGKey]:
         """Do a single PGA-ME iteration: train critics and greedy policy,
@@ -226,13 +226,13 @@ class PGAMEEmitter(Emitter):
     @partial(jax.jit, static_argnames=("self",))
     def state_update(
         self,
-        emitter_state: PGAMEEmitterState,
+        emitter_state: PGAMEEmitterStateOld,
         repertoire: Optional[Repertoire],
         genotypes: Optional[Genotype],
         fitnesses: Optional[Fitness],
         descriptors: Optional[Descriptor],
         extra_scores: ExtraScores,
-    ) -> PGAMEEmitterState:
+    ) -> PGAMEEmitterStateOld:
         """This function gives an opportunity to update the emitter state
         after the genotypes have been scored.
 
@@ -263,8 +263,8 @@ class PGAMEEmitter(Emitter):
         emitter_state = emitter_state.replace(replay_buffer=replay_buffer)
 
         def scan_train_critics(
-            carry: PGAMEEmitterState, unused: Any
-        ) -> Tuple[PGAMEEmitterState, Any]:
+            carry: PGAMEEmitterStateOld, unused: Any
+        ) -> Tuple[PGAMEEmitterStateOld, Any]:
             emitter_state = carry
             new_emitter_state = self._train_critics(emitter_state)
             return new_emitter_state, ()
@@ -280,7 +280,7 @@ class PGAMEEmitter(Emitter):
         return emitter_state  # type: ignore
 
     @partial(jax.jit, static_argnames=("self",))
-    def _train_critics(self, emitter_state: PGAMEEmitterState) -> PGAMEEmitterState:
+    def _train_critics(self, emitter_state: PGAMEEmitterStateOld) -> PGAMEEmitterStateOld:
         """Apply one gradient step to critics and to the greedy policy
         (contained in carry in training_state), then soft update target critics
         and target greedy policy.
@@ -323,7 +323,7 @@ class PGAMEEmitter(Emitter):
             critic_params,
         )
 
-        def update_policy_step(emitter_state: PGAMEEmitterState) -> PGAMEEmitterState:
+        def update_policy_step(emitter_state: PGAMEEmitterStateOld) -> PGAMEEmitterStateOld:
 
             # Update greedy policy
             policy_loss, policy_gradient = jax.value_and_grad(self._policy_loss_fn)(
@@ -365,7 +365,7 @@ class PGAMEEmitter(Emitter):
         )
 
         # Create new training state
-        new_state = PGAMEEmitterState(
+        new_state = PGAMEEmitterStateOld(
             critic_params=critic_params,
             critic_optimizer_state=critic_optimizer_state,
             greedy_policy_params=emitter_state.greedy_policy_params,
@@ -384,7 +384,7 @@ class PGAMEEmitter(Emitter):
     def _mutation_function_pg(
         self,
         controller_params: Genotype,
-        emitter_state: PGAMEEmitterState,
+        emitter_state: PGAMEEmitterStateOld,
     ) -> Genotype:
         """Apply pg mutation to a policy via multiple steps of gradient descent.
 
@@ -399,8 +399,8 @@ class PGAMEEmitter(Emitter):
         """
 
         def scan_train_controller(
-            carry: Tuple[PGAMEEmitterState, Genotype], unused: Any
-        ) -> Tuple[Tuple[PGAMEEmitterState, Genotype], Any]:
+            carry: Tuple[PGAMEEmitterStateOld, Genotype], unused: Any
+        ) -> Tuple[Tuple[PGAMEEmitterStateOld, Genotype], Any]:
             emitter_state, controller_params = carry
             (
                 new_emitter_state,
@@ -420,9 +420,9 @@ class PGAMEEmitter(Emitter):
     @partial(jax.jit, static_argnames=("self",))
     def _train_controller(
         self,
-        emitter_state: PGAMEEmitterState,
+        emitter_state: PGAMEEmitterStateOld,
         controller_params: Params,
-    ) -> Tuple[PGAMEEmitterState, Params]:
+    ) -> Tuple[PGAMEEmitterStateOld, Params]:
         """Apply one gradient step to a policy (called controllers_params).
 
         Args:
@@ -452,7 +452,7 @@ class PGAMEEmitter(Emitter):
         controller_params = optax.apply_updates(controller_params, policy_updates)
 
         # Create new training state
-        new_emitter_state = PGAMEEmitterState(
+        new_emitter_state = PGAMEEmitterStateOld(
             critic_params=emitter_state.critic_params,
             critic_optimizer_state=emitter_state.critic_optimizer_state,
             greedy_policy_params=emitter_state.greedy_policy_params,

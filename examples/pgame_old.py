@@ -45,7 +45,7 @@ import jax.numpy as jnp
 import brax
 
 import qdax
-
+from qdax.core.emitters.old_pga_emitter import PGAMEConfigOld, PGAMEEmitterOld
 
 from qdax.core.map_elites import MAPElites
 from qdax.core.containers.mapelites_repertoire import compute_cvt_centroids
@@ -56,7 +56,6 @@ from qdax.core.neuroevolution.networks.networks import MLP
 from qdax.core.emitters.mutation_operators import isoline_variation
 from qdax.utils.plotting import plot_map_elites_results
 
-from qdax.core.emitters.pga_me_emitter import PGAMEConfig, PGAMEEmitter
 from qdax.utils.metrics import CSVLogger, default_qd_metrics
 
 
@@ -144,7 +143,7 @@ def play_step_fn(
     """
 
     actions = policy_network.apply(policy_params, env_state.obs)
-    
+
     state_desc = env_state.info["state_descriptor"]
     next_state = env.step(env_state, actions)
 
@@ -192,7 +191,7 @@ metrics_function = functools.partial(
 # The emitter is used to evolve the population at each mutation step. In this example, the emitter is the Policy Gradient emitter, the one used in Policy Gradient Assisted Map Elites. It trains a critic with the transitions experienced in the environment and uses the critic to apply Policy Gradient updates to the policies evolved.
 
 # Define the PG-emitter config
-pga_emitter_config = PGAMEConfig(
+pga_emitter_config = PGAMEConfigOld(
     env_batch_size=env_batch_size,
     batch_size=transitions_batch_size,
     proportion_mutation_ga=proportion_mutation_ga,
@@ -217,7 +216,7 @@ variation_fn = functools.partial(
     isoline_variation, iso_sigma=iso_sigma, line_sigma=line_sigma
 )
 
-pg_emitter = PGAMEEmitter(
+pg_emitter = PGAMEEmitterOld(
     config=pga_emitter_config,
     policy_network=policy_network,
     env=env,
