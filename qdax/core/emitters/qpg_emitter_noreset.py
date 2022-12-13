@@ -21,7 +21,7 @@ from qdax.environments.base_wrappers import QDEnv
 from qdax.types import Descriptor, ExtraScores, Fitness, Genotype, Params, RNGKey
 
 
-class QualityPGEmitterStateNoReset(EmitterState):
+class QualityPGEmitterState(EmitterState):
     """Contains training state for the learner."""
 
     critic_params: Params
