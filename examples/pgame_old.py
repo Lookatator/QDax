@@ -254,7 +254,7 @@ log_period = 10
 num_loops = int(num_iterations / log_period)
 
 csv_logger = CSVLogger(
-    "pgame-logs.csv",
+    "pgame-old-logs.csv",
     header=["loop", "iteration", "qd_score", "max_fitness", "coverage", "time"]
 )
 all_metrics = {}
