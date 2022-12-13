@@ -286,6 +286,7 @@ for i in range(num_loops):
             all_metrics[key] = value
 
     csv_logger.log(logged_metrics)
+    print(i, logged_metrics)
 
 # +
 #@title Visualization
